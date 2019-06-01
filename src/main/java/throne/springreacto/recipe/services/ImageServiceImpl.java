@@ -3,6 +3,7 @@ package throne.springreacto.recipe.services;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
 import throne.springreacto.recipe.domain.Recipe;
 import throne.springreacto.recipe.repositories.reactive.RecipeReactiveRepository;
 
@@ -18,26 +19,29 @@ public class ImageServiceImpl implements ImageService {
     }
 
     @Override
-    public void saveImageFile(String recipeId, MultipartFile file) {
-        try {
-            Recipe recipe = recipeReactiveRepository.findById(recipeId).block();
+    public Mono<Void> saveImageFile(String recipeId, MultipartFile file) {
+        Mono<Recipe> recipeMono = recipeReactiveRepository.findById(recipeId)
+                .map(recipe -> {
+                    Byte[] byteObjects = new Byte[0];
+                    try {
+                        byteObjects = new Byte[file.getBytes().length];
 
-            Byte[] byteObjects = new Byte[file.getBytes().length];
+                        int i = 0;
 
-            int i = 0;
+                        for (byte b : file.getBytes()) {
+                            byteObjects[i++] = b;
+                        }
+                        recipe.setImage(byteObjects);
+                        return recipe;
+                    } catch (IOException e) {
+                        //todo handle better
+                        log.error("Error occurred", e);
+                        e.printStackTrace();
+                        throw new RuntimeException();
+                    }
 
-            for (byte b : file.getBytes()) {
-                byteObjects[i++] = b;
-            }
-
-            recipe.setImage(byteObjects);
-
-            recipeReactiveRepository.save(recipe);
-        } catch (IOException e) {
-            //todo handle better
-            log.error("Error occurred", e);
-
-            e.printStackTrace();
-        }
+                });
+        recipeReactiveRepository.save(recipeMono.block()).block();
+        return Mono.empty();
     }
 }

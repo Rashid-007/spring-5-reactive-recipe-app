@@ -36,23 +36,29 @@ public class RecipeServiceImp implements RecipeService {
 
     @Override
     public Mono<Recipe> getById(String id) {
-        Mono<Recipe> recipeById = recipeReactiveRepository.findById(id);
-        return recipeById;//foundById.orElseThrow(() -> new NotFoundException("Recipe not found for id value: " + id.toString()));//Customized exception instead of RuntimeException
+        return recipeReactiveRepository.findById(id);
+        //foundById.orElseThrow(() -> new NotFoundException("Recipe not found for id value: " + id.toString()));//Customized exception instead of RuntimeException
     }
 
     @Override
     public Mono<RecipeCommand> saveRecipeCommand(RecipeCommand recipeCommand) {
-        Mono<Recipe> savedRecipe = recipeReactiveRepository.save(recipeCommandToRecipe.convert(recipeCommand));
-        //log.debug("saved RecipeId" + savedRecipe);
 
-        return savedRecipe.map(recipeToRecipeCommand::convert);
+        return recipeReactiveRepository
+                .save(recipeCommandToRecipe.convert(recipeCommand))
+                .map(recipeToRecipeCommand::convert);
     }
 
     @Override
     //Added because we do conversion outside of spring initiated transaction. In case of lazy loading, without this it will throw exception
     public Mono<RecipeCommand> findCommandById(String id) {
-        Mono<Recipe> recipeById = recipeReactiveRepository.findById(id);
-        return recipeById.map(recipeToRecipeCommand::convert);
+        return recipeReactiveRepository
+                .findById(id)
+                .map(recipe -> {
+                    RecipeCommand recipeCommand = recipeToRecipeCommand.convert(recipe);
+                    recipeCommand.getIngredients().forEach(ingredientCommand ->
+                            ingredientCommand.setRecipeId(recipe.getId()));
+                    return recipeCommand;
+                });
     }
 
     @Override

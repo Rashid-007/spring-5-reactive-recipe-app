@@ -15,6 +15,7 @@ import throne.springreacto.recipe.services.ImageService;
 import throne.springreacto.recipe.services.RecipeService;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -67,6 +68,8 @@ public class ImageControllerTest {
         MockMultipartFile multipartFile =
                 new MockMultipartFile("imagefile", "testing.txt", "text/plain",
                         "Spring Framework".getBytes());
+
+        when(imageService.saveImageFile(anyString(), any())).thenReturn(Mono.empty());
 
         mockMvc.perform(multipart("/recipe/1/image").file(multipartFile))
                 .andExpect(status().is3xxRedirection())

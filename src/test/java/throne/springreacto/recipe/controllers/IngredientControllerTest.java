@@ -17,6 +17,7 @@ import throne.springreacto.recipe.services.RecipeService;
 import throne.springreacto.recipe.services.UnitOfMeasureServiceImp;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,6 +101,7 @@ public class IngredientControllerTest {
         //given
         IngredientCommand command = new IngredientCommand();
         command.setId("3");
+        command.setRecipeId("2");
 
         //when
         when(ingredientService.saveIngredientCommand(any())).thenReturn(Mono.just(command));
@@ -109,6 +111,7 @@ public class IngredientControllerTest {
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .param("id", "")
                 .param("description", "some string")
+                .param("recipeId", "2")
         )
                 .andExpect(status().is3xxRedirection())
                 .andExpect(view().name("redirect:/recipe/2/ingredient/3/show"));
@@ -138,7 +141,7 @@ public class IngredientControllerTest {
 
     @Test
     public void testDeleteIngredient() throws Exception {
-
+        when(ingredientService.deleteById(anyString(), anyString())).thenReturn(Mono.empty());
         //then
         mockMvc.perform(get("/recipe/2/ingredient/3/delete")
         )

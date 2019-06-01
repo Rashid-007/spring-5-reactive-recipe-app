@@ -8,6 +8,7 @@ import throne.springreacto.recipe.converters.IngredientCommandToIngredient;
 import throne.springreacto.recipe.converters.IngredientToIngredientCommand;
 import throne.springreacto.recipe.domain.Ingredient;
 import throne.springreacto.recipe.domain.Recipe;
+import throne.springreacto.recipe.repositories.RecipeRepository;
 import throne.springreacto.recipe.repositories.reactive.RecipeReactiveRepository;
 import throne.springreacto.recipe.repositories.reactive.UnitOfMeasureReactiveRepository;
 
@@ -35,36 +36,61 @@ public class IngredientServiceImp implements IngredientService {
     @Override
     public Mono<IngredientCommand> findByRecipeIdByIngredientId(String recipeId, String ingredientId) {
 
-        Mono<Recipe> recipeById = recipeReactiveRepository.findById(recipeId);
-        Mono<IngredientCommand> ingredientCommandMono = recipeById.map(recipe -> {
-            Optional<IngredientCommand> ingredientCommandOptional = recipe.getIngredients().stream()
-                    .filter(ingredient -> ingredient.getId().equals(ingredientId))
-                    .map(ingredientToIngredientCommand::convert).findFirst();
+        return recipeReactiveRepository
+                .findById(recipeId)
+                .flatMapIterable(Recipe::getIngredients)
+                .filter(ingredient -> ingredient.getId().equals(ingredientId))
+                .single()
+                .map(ingredient -> {
+                    IngredientCommand command = ingredientToIngredientCommand.convert(ingredient);
+                    command.setRecipeId(recipeId);
 
-            IngredientCommand ingredientCommand = ingredientCommandOptional.orElseThrow(() -> new IllegalArgumentException("No such command found"));
-            return ingredientCommand;
-        });
-
-        return ingredientCommandMono;
+                    return command;
+                });
     }
 
     @Override
     public Mono<IngredientCommand> saveIngredientCommand(IngredientCommand ingredientCommand) {
-        Mono<Recipe> recipeById = recipeReactiveRepository.findById(ingredientCommand.getRecipeId());
-        Mono<IngredientCommand> mappedIngredient = recipeById.map(recipe -> {
-            Optional<Ingredient> ingredientOptional = recipe.getIngredients().stream()
-                    .filter(ingredient -> ingredient.getId().equals(ingredientCommand.getId())).findFirst();
-            Ingredient ingredient = ingredientOptional.orElseGet(() -> ingredientCommandToIngredient.convert(ingredientCommand));
-            ingredient.setDescription(ingredientCommand.getDescription());
-            ingredient.setAmount(ingredientCommand.getAmount());
-            ingredient.setUnitOfMeasure(unitOfMeasureReactiveRepository.findById(ingredientCommand.getUnitOfMeasure().getId()).block());
-            recipe.getIngredients().add(ingredient);
 
-            recipeReactiveRepository.save(recipe);
+        Recipe recipe = recipeReactiveRepository
+                .findById(ingredientCommand.getRecipeId())
+                .blockOptional().orElseThrow(() -> new IllegalArgumentException("the recipe not found"));
 
-            return ingredientToIngredientCommand.convert(ingredient);
-        });
-        return mappedIngredient;
+
+        recipe.getIngredients()
+                .stream()
+                .filter(ingredient -> ingredient.getId().equals(ingredientCommand.getId()))
+                .findFirst()
+                .map(ingredient -> {
+                    ingredient.setDescription(ingredientCommand.getDescription());
+                    ingredient.setAmount(ingredientCommand.getAmount());
+                    ingredient.setUnitOfMeasure(unitOfMeasureReactiveRepository.findById(ingredientCommand.getUnitOfMeasure().getId()).block());
+                    return ingredient;
+                }).orElseGet(() -> {
+                    Ingredient newIngredient = ingredientCommandToIngredient.convert(ingredientCommand);
+                    newIngredient.setUnitOfMeasure(unitOfMeasureReactiveRepository.findById(ingredientCommand.getUnitOfMeasure().getId()).block());
+                    recipe.getIngredients().add(newIngredient);
+                    return newIngredient;
+                });
+        Recipe savedRecipe = recipeReactiveRepository.save(recipe).block();
+
+        Optional<Ingredient> savedIngredientOptional = savedRecipe.getIngredients().stream()
+                .filter(recipeIngredients -> recipeIngredients.getId().equals(ingredientCommand.getId()))
+                .findFirst();
+
+        //check by description
+        if (!savedIngredientOptional.isPresent()) {
+            //not totally safe... But best guess
+            savedIngredientOptional = savedRecipe.getIngredients().stream()
+                    .filter(recipeIngredients -> recipeIngredients.getDescription().equals(ingredientCommand.getDescription()))
+                    .filter(recipeIngredients -> recipeIngredients.getAmount().equals(ingredientCommand.getAmount()))
+                    .filter(recipeIngredients -> recipeIngredients.getUnitOfMeasure().getId().equals(ingredientCommand.getUnitOfMeasure().getId()))
+                    .findFirst();
+        }
+        Ingredient savedIngredient = savedIngredientOptional.orElseThrow(() -> new IllegalArgumentException("Ingredient not found"));
+        IngredientCommand savedCommand = ingredientToIngredientCommand.convert(savedIngredient);
+        savedCommand.setRecipeId(recipe.getId());
+        return Mono.just(savedCommand);
     }
 
     @Override
@@ -72,18 +98,20 @@ public class IngredientServiceImp implements IngredientService {
 
         log.debug("Deleting ingredient: " + recipeId + ":" + idToDelete);
 
-        Mono<Recipe> recipeById = recipeReactiveRepository.findById(recipeId);
-        Recipe recipe = recipeById.block();
+        Recipe recipe = recipeReactiveRepository.findById(recipeId).block();
+
         if(recipe != null){
             log.debug("found recipe");
-            Optional<Ingredient> foundIngredient = recipe.getIngredients()
+            Ingredient ingredientToDelete = recipe.getIngredients()
                     .stream()
                     .filter(ingredient -> ingredient.getId().equals(idToDelete))
-                    .findFirst();
-            Ingredient ingredientToDelete = foundIngredient.orElseThrow(() -> new IllegalArgumentException("No such ingredient found for the recipe given"));
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("No such ingredient found for the recipe given"));
 
             recipe.getIngredients().remove(ingredientToDelete);
-            recipeReactiveRepository.save(recipe);
+            recipeReactiveRepository.save(recipe).block();
+        }else {
+            log.debug("Recipe with id: {} not found", recipeId);
         }
         return Mono.empty();
     }

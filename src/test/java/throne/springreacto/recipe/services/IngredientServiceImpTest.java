@@ -6,12 +6,14 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import reactor.core.publisher.Mono;
 import throne.springreacto.recipe.commands.IngredientCommand;
+import throne.springreacto.recipe.commands.UnitOfMeasureCommand;
 import throne.springreacto.recipe.converters.IngredientCommandToIngredient;
 import throne.springreacto.recipe.converters.IngredientToIngredientCommand;
 import throne.springreacto.recipe.converters.UnitOfMeasureCommandToUnitOfMeasure;
 import throne.springreacto.recipe.converters.UnitOfMeasureToUnitOfMeasureCommand;
 import throne.springreacto.recipe.domain.Ingredient;
 import throne.springreacto.recipe.domain.Recipe;
+import throne.springreacto.recipe.domain.UnitOfMeasure;
 import throne.springreacto.recipe.repositories.RecipeRepository;
 import throne.springreacto.recipe.repositories.UnitOfMeasureRepository;
 import throne.springreacto.recipe.repositories.reactive.RecipeReactiveRepository;
@@ -86,6 +88,10 @@ public class IngredientServiceImpTest {
         //given
         IngredientCommand command = new IngredientCommand();
         command.setId("3");
+        command.setRecipeId("2");
+        command.setUnitOfMeasure(new UnitOfMeasureCommand());
+        command.getUnitOfMeasure().setId("123");
+
 
         Recipe savedRecipe = new Recipe();
         savedRecipe.addIngredient(new Ingredient());
@@ -93,12 +99,13 @@ public class IngredientServiceImpTest {
 
         when(recipeReactiveRepository.findById(anyString())).thenReturn(Mono.just(new Recipe()));
         when(recipeReactiveRepository.save(any())).thenReturn(Mono.just(savedRecipe));
+        when(unitOfMeasureReactiveRepository.findById(anyString())).thenReturn(Mono.just(new UnitOfMeasure()));
 
         //when
-        Mono<IngredientCommand> result = sut.saveIngredientCommand(command);
+        IngredientCommand result = sut.saveIngredientCommand(command).block();
 
         //then
-        assertEquals("3", result.block().getId());
+        assertEquals("3", result.getId());
         verify(recipeReactiveRepository, times(1)).findById(anyString());
         verify(recipeReactiveRepository, times(1)).save(any(Recipe.class));
 
@@ -113,6 +120,7 @@ public class IngredientServiceImpTest {
         recipe.addIngredient(ingredient);
 
         when(recipeReactiveRepository.findById(anyString())).thenReturn(Mono.just(recipe));
+        when(recipeReactiveRepository.save(any())).thenReturn(Mono.just(recipe));
 
         //when
         sut.deleteById("1", "3");
